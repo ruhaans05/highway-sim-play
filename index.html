@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interstate — Highway Driving Simulator</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+  #wipers { position: fixed; inset: 0; pointer-events: none; z-index: 2; display: none; }
+
+  #hud {
+    position: fixed; left: 24px; bottom: 24px; color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,.8); user-select: none; pointer-events: none;
+  }
+  #speed { font-size: 64px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  #speed span { font-size: 20px; font-weight: 400; opacity: .7; }
+  #meta { margin-top: 6px; font-size: 14px; opacity: .85; }
+
+  #signal {
+    position: fixed; right: 24px; bottom: 24px; color: #fff; text-align: right;
+    text-shadow: 0 1px 3px rgba(0,0,0,.8); user-select: none; pointer-events: none;
+    font-size: 13px; opacity: .75; line-height: 1.7;
+  }
+  #signal b { display: inline-block; min-width: 34px; text-align: center; border: 1px solid rgba(255,255,255,.4);
+    border-radius: 4px; padding: 1px 4px; margin-left: 6px; font-weight: 600; }
+
+  #zone {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    color: #fff; font-size: 16px; letter-spacing: .12em; text-transform: uppercase;
+    text-shadow: 0 1px 3px rgba(0,0,0,.8); opacity: .95; user-select: none; pointer-events: none;
+    background: rgba(10, 14, 22, .5); padding: 7px 16px; border-radius: 999px;
+    backdrop-filter: blur(5px); white-space: nowrap; z-index: 6;
+  }
+  /* persistent state-border indicator: always shows which state you're in,
+     styled like a green highway welcome sign; flashes when you cross a line */
+  #statebar {
+    position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+    color: #fff; font-size: 14px; font-weight: 700; letter-spacing: .16em;
+    text-transform: uppercase; text-shadow: 0 1px 3px rgba(0,0,0,.7);
+    background: rgba(9, 74, 44, .72); border: 1.5px solid rgba(255,255,255,.55);
+    padding: 5px 18px; border-radius: 6px; white-space: nowrap; z-index: 6;
+    user-select: none; pointer-events: none; backdrop-filter: blur(5px);
+    display: none; align-items: center; gap: 10px;
+    transition: background .3s ease, box-shadow .3s ease;
+  }
+  #statebar .statecopy { line-height: 1.05; text-align: left; }
+  #statebar .route-shield { display: block; width: 46px; height: 46px; flex: 0 0 46px;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,.55)); }
+  #statebar .route-shield svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  #statebar .tag { display: block; font-size: 9px; font-weight: 500; opacity: .8;
+    letter-spacing: .22em; margin-top: 1px; }
+  #statebar.crossing {
+    background: rgba(20, 120, 66, .92);
+    box-shadow: 0 0 22px rgba(80, 220, 140, .8);
+    animation: stateflash .5s ease;
+  }
+  @keyframes stateflash { 0% { transform: translateX(-50%) scale(1.14); } 100% { transform: translateX(-50%) scale(1); } }
+  #clock {
+    position: fixed; top: 20px; right: 24px; color: #fff; font-size: 15px;
+    font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px rgba(0,0,0,.8);
+    opacity: .8; user-select: none; pointer-events: none;
+  }
+  #weather {
+    position: fixed; top: 40px; right: 24px; color: #fff; font-size: 13px;
+    text-align: right; text-shadow: 0 1px 3px rgba(0,0,0,.8);
+    opacity: .82; user-select: none; pointer-events: none; white-space: nowrap;
+  }
+  /* Optional traffic density control. It lives beneath the live weather readout
+     so it stays out of the driving HUD while remaining easy to reach. */
+  #trafficcontrol {
+    position: fixed; top: 62px; right: 24px; z-index: 6;
+    display: flex; flex-direction: column; align-items: stretch; gap: 5px;
+    color: #fff; font-size: 12px; font-weight: 600; letter-spacing: .04em;
+    text-shadow: 0 1px 3px rgba(0,0,0,.8); user-select: none;
+    background: rgba(10, 14, 22, .62); border: 1px solid rgba(255,255,255,.25);
+    border-radius: 8px; padding: 5px 9px; backdrop-filter: blur(6px);
+  }
+  #trafficcontrol label { opacity: .82; }
+  #trafficlevel { width: 150px; }
+  #monthcontrol {
+    position: fixed; top: 139px; right: 24px; z-index: 6;
+    display: flex; flex-direction: column; align-items: stretch; gap: 5px;
+    color: #fff; font-size: 12px; font-weight: 600; letter-spacing: .04em;
+    text-shadow: 0 1px 3px rgba(0,0,0,.8); user-select: none;
+    background: rgba(10, 14, 22, .62); border: 1px solid rgba(255,255,255,.25);
+    border-radius: 8px; padding: 5px 9px; backdrop-filter: blur(6px);
+  }
+  #monthcontrol label { opacity: .82; }
+  #monthslider { width: 150px; }
+  #rearviewbutton {
+    position: fixed; right: 24px; bottom: 86px; z-index: 6;
+    color: rgba(255,255,255,.9); background: rgba(10,14,22,.62);
+    border: 1px solid rgba(255,255,255,.25); border-radius: 8px;
+    padding: 6px 11px; font: 600 12px -apple-system, BlinkMacSystemFont, sans-serif; letter-spacing: .04em;
+    cursor: pointer; backdrop-filter: blur(6px); user-select: none;
+  }
+  #rearviewbutton:hover, #rearviewbutton.active {
+    background: rgba(30,90,200,.8); border-color: rgba(255,255,255,.6);
+  }
+  .trafficpresets { display: flex; gap: 5px; }
+  .trafficpresets button { color: rgba(255,255,255,.86); background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.22); border-radius: 5px; padding: 3px 6px;
+    font: 600 10px -apple-system, BlinkMacSystemFont, sans-serif; letter-spacing: .04em;
+    cursor: pointer; white-space: nowrap; }
+  .trafficpresets button:hover { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.42); }
+  .trafficpresets button.active { color: #fff; background: rgba(30, 90, 200, .72); border-color: rgba(255,255,255,.58); }
+  /* panels stack in one column so rows can wrap without overlapping */
+  #panels {
+    position: fixed; top: 16px; left: 16px; display: flex;
+    flex-direction: column; gap: 8px; max-width: 62vw; z-index: 5;
+    user-select: none;
+  }
+  #mpanel, #panel, #wpanel, #characterpanel {
+    display: flex; gap: 8px; flex-wrap: wrap; user-select: none;
+  }
+  /* Route buttons stay in one continuous row; new corridors extend to the
+     right and remain reachable on narrower screens via horizontal scrolling. */
+  #mpanel { flex-wrap: nowrap; max-width: calc(100vw - 32px); overflow-x: auto; padding-bottom: 2px; }
+  /* keep the driving view clean: the route controls disappear completely
+     until the pointer reaches the control area, then fade in as a group */
+  #panels { opacity: 0; transition: opacity .28s ease; }
+  #panels:hover { opacity: 1; }
+  #panel, #wpanel { opacity: 0; transition: opacity .2s ease; }
+  #panels:hover #panel, #panels:hover #wpanel { opacity: 1; }
+  #platepanel {
+    position: fixed; bottom: 18px; right: 18px; display: flex; gap: 6px;
+    align-items: center; z-index: 6; user-select: none;
+  }
+  #platepanel .lbl { color: #fff; opacity: .7; font-size: 11px; letter-spacing: .1em; margin-right: 2px; }
+  #mpanel button,
+  #wpanel button,
+  #panel button,
+  #characterpanel button,
+  #platepanel button {
+    background: rgba(10, 14, 22, .62); color: #fff; border: 1px solid rgba(255,255,255,.25);
+    border-radius: 8px; padding: 6px 11px; font-size: 12px; font-weight: 600;
+    letter-spacing: .04em; cursor: pointer; backdrop-filter: blur(6px);
+    font-family: inherit;
+  }
+  #mpanel button:hover,
+  #wpanel button:hover,
+  #panel button:hover,
+  #characterpanel button:hover,
+  #platepanel button:hover { background: rgba(50, 70, 110, .75); }
+  #mpanel button.active,
+  #wpanel button.active,
+  #panel button.active,
+  #characterpanel button.active,
+  #platepanel button.active { background: rgba(30, 90, 200, .8); border-color: rgba(255,255,255,.6); }
+
+  /* time-of-day slider (15-min steps) */
+  .timewrap {
+    display: flex; align-items: center; gap: 9px;
+    background: rgba(10, 14, 22, .62); border: 1px solid rgba(255,255,255,.25);
+    border-radius: 8px; padding: 5px 11px; backdrop-filter: blur(6px);
+  }
+  .timeval { color: #fff; font-size: 12px; font-weight: 600; letter-spacing: .04em;
+    font-variant-numeric: tabular-nums; min-width: 66px; }
+  .timeslider { -webkit-appearance: none; appearance: none; width: 150px; height: 4px;
+    background: rgba(255,255,255,.28); border-radius: 3px; outline: none; cursor: pointer; }
+  .timeslider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; border-radius: 50%; background: #fff;
+    border: 2px solid rgba(30, 90, 200, .9); cursor: pointer; }
+  .timeslider::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%;
+    background: #fff; border: 2px solid rgba(30, 90, 200, .9); cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<canvas id="wipers"></canvas>
+<div id="panels">
+  <div id="mpanel"></div>
+  <div id="panel"></div>
+  <div id="wpanel"></div>
+  <div id="characterpanel"></div>
+</div>
+<div id="zone"></div>
+<div id="statebar"></div>
+<div id="clock"></div>
+<div id="weather"></div>
+<div id="trafficcontrol">
+  <label for="trafficlevel">TRAFFIC <span id="trafficvalue">AUTO</span></label>
+  <input id="trafficlevel" class="timeslider" type="range" min="1" max="6" step="1" value="3" aria-label="Traffic density">
+  <div class="trafficpresets" aria-label="Traffic presets">
+    <button id="trafficpacked" type="button">A · PACKED FLOW</button>
+    <button id="trafficdeadlock" type="button">B · DEADLOCK</button>
+    <button id="trafficlatenight" type="button">C · LATE NIGHT</button>
+  </div>
+</div>
+<div id="monthcontrol">
+  <label for="monthslider">MONTH <span id="monthvalue">JANUARY</span></label>
+  <input id="monthslider" class="timeslider" type="range" min="0" max="11" step="1" value="0" aria-label="Month">
+</div>
+<button id="rearviewbutton" type="button" aria-label="Hold for rear view" aria-pressed="false">P · REAR VIEW</button>
+<div id="platepanel"></div>
+<div id="hud">
+  <div id="speed">0<span> mph</span></div>
+  <div id="meta"></div>
+</div>
+<div id="signal">
+  throttle / brake<b>W&nbsp;S</b><br>
+  steer<b>A&nbsp;D</b><br>
+  camera<b>C</b> &nbsp; time ×8<b>T</b><br>
+  headlights<b>L</b> &nbsp; horn<b>H</b><br>
+  blinkers<b>Q&nbsp;E</b><br>
+  rear view<b>P</b><br>
+  <span id="build" style="opacity:.5">build 9 · next-gen graphics</span>
+</div>
+<script>
+  // surface uncaught errors in the HUD (headless-debug aid)
+  addEventListener('error', e => {
+    const z = document.getElementById('zone');
+    if (z) z.textContent = 'ERR: ' + e.message + ' @ ' + (e.filename || '').split('/').pop() + ':' + e.lineno;
+  });
+</script>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+<script type="module" src="./src/main.js?v=density-ramp-20261108-8"></script>
+</body>
+</html>
